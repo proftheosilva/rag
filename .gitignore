@@ -67,5 +67,10 @@ Desktop.ini
 .idea/
 .vscode/
 *.swp
-*.swo
-*~
+# ===============================
+# dbt compilados e pacotes
+# ===============================
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+

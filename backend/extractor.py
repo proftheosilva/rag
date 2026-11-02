@@ -1,16 +1,37 @@
 import os
 import re
-from typing import Dict, Any, List
+import json
+import io
+from typing import Dict, Any, List, Union, Tuple
+import pandas as pd
 import pdfplumber
 from pypdf import PdfReader
 
-class InvoiceExtractor:
+class DocumentExtractor:
+    """
+    Extrator polimórfico de documentos estruturados, semiestruturados e não-estruturados.
+    Classifica por extensão e conteúdo, tabula os dados e extrai campos essenciais.
+    """
+
+    @staticmethod
+    def identify_file_type(filename: str) -> str:
+        """Identifica a extensão normalizada do arquivo."""
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in [".csv"]:
+            return "csv"
+        elif ext in [".json"]:
+            return "json"
+        elif ext in [".sql"]:
+            return "sql"
+        elif ext in [".pdf"]:
+            return "pdf"
+        elif ext in [".txt", ".md"]:
+            return "text"
+        return "unstructured"
+
     @staticmethod
     def extract_text_from_pdf(pdf_source: Any) -> str:
-        """Extrai texto integral do PDF usando pdfplumber com fallback para pypdf.
-        Suporta caminho em disco (str), objeto io.BytesIO ou bytes brutos.
-        """
-        import io
+        """Extrai texto integral de PDF usando pdfplumber com fallback para pypdf."""
         if isinstance(pdf_source, bytes):
             pdf_source = io.BytesIO(pdf_source)
 
@@ -27,7 +48,6 @@ class InvoiceExtractor:
             pass
 
         if not full_text.strip():
-            # Fallback pypdf
             try:
                 if hasattr(pdf_source, "seek"):
                     pdf_source.seek(0)
@@ -43,10 +63,11 @@ class InvoiceExtractor:
 
     @staticmethod
     def parse_invoice_fields(text: str, filename: str) -> Dict[str, Any]:
-        """Identifica campos estruturados na nota fiscal a partir do texto extraído"""
+        """Identifica campos estruturados na nota fiscal a partir do texto extraído."""
         data: Dict[str, Any] = {
             "nome_arquivo": filename,
             "categoria": "Notas Fiscais",
+            "tipo_tabela": "notas_fiscais",
             "numero_nota": None,
             "serie": None,
             "data_emissao": None,
@@ -114,24 +135,23 @@ class InvoiceExtractor:
         if obs_match:
             data["observacoes"] = obs_match.group(1).strip()
 
-        # Itens / Produtos (busca por linhas de itens)
+        # Itens / Produtos
         lines = text.split("\n")
         capturing_items = False
         for line in lines:
             line_str = line.strip()
-            if "Descrição do Produto" in line_str:
+            if "Descrição do Produto" in line_str or "Descricao do Produto" in line_str:
                 capturing_items = True
                 continue
             if capturing_items and ("INFORMAÇÕES COMPLEMENTARES" in line_str or "VALOR TOTAL" in line_str):
                 capturing_items = False
                 break
             if capturing_items and line_str:
-                # Exemplo: Notebook Dell Latitude 5440 UN 5 R$ 4.500,00 R$ 22.500,00
                 price_matches = re.findall(r"R\$\s*([\d\.,]+)", line_str)
                 if price_matches:
                     data["itens"].append(line_str)
 
-        # Cálculo de campos preenchidos e nulos para observabilidade estruturada
+        # Cálculo de métricas
         core_fields = [
             "numero_nota", "data_emissao", "fornecedor", "cnpj_fornecedor",
             "cliente", "cnpj_cliente", "natureza_operacao", "valor_total", "observacoes"
@@ -145,8 +165,73 @@ class InvoiceExtractor:
         data["campos_preenchidos"] = preenchidos
         data["campos_nulos"] = nulos
         data["percentual_sucesso"] = percentual
-        data["status"] = "PROCESSADO" if percentual >= 70 else "PARCIAL"
+        data["status"] = "PROCESSADO" if percentual >= 60 else "PARCIAL"
 
         return data
 
-extractor = InvoiceExtractor()
+    @staticmethod
+    def extract_structured(file_input: Union[str, bytes, io.BytesIO], filename: str, file_type: str) -> Tuple[List[Dict[str, Any]], str, str]:
+        """
+        Extrai e tabula arquivos estruturados ou semi-estruturados (csv, json, sql).
+        Retorna (lista_de_registros_dict, categoria, tipo_tabela).
+        """
+        records: List[Dict[str, Any]] = []
+        raw_content = ""
+
+        # Obter string do conteúdo
+        if isinstance(file_input, str):
+            with open(file_input, "r", encoding="utf-8", errors="replace") as f:
+                raw_content = f.read()
+        elif isinstance(file_input, bytes):
+            raw_content = file_input.decode("utf-8", errors="replace")
+        elif hasattr(file_input, "read"):
+            file_input.seek(0)
+            content = file_input.read()
+            if isinstance(content, bytes):
+                raw_content = content.decode("utf-8", errors="replace")
+            else:
+                raw_content = content
+
+        categoria = "Dados Financeiros"
+        tipo_tabela = "financeiro_estruturado"
+
+        if "contrato" in filename.lower():
+            categoria = "Contratos"
+            tipo_tabela = "contratos"
+        elif "nota" in filename.lower() or "nf" in filename.lower():
+            categoria = "Notas Fiscais"
+            tipo_tabela = "notas_fiscais"
+
+        if file_type == "csv":
+            df = pd.read_csv(io.StringIO(raw_content))
+            records = df.to_dict(orient="records")
+        elif file_type == "json":
+            data = json.loads(raw_content)
+            if isinstance(data, list):
+                records = data
+            elif isinstance(data, dict):
+                records = [data]
+        elif file_type == "sql":
+            # Extração simples de linhas INSERT INTO
+            insert_pattern = re.findall(r"INSERT\s+INTO\s+([^\s\(]+)\s*(?:\(([^\)]+)\))?\s*VALUES\s*\(([^\)]+)\);?", raw_content, re.IGNORECASE)
+            for tbl, cols, vals in insert_pattern:
+                tbl_clean = tbl.strip("`'\" ")
+                if tbl_clean:
+                    tipo_tabela = tbl_clean.lower()
+                val_list = [v.strip().strip("'\"") for v in vals.split(",")]
+                if cols:
+                    col_list = [c.strip().strip("`'\" ") for c in cols.split(",")]
+                    record = dict(zip(col_list, val_list))
+                else:
+                    record = {f"col_{i}": v for i, v in enumerate(val_list)}
+                records.append(record)
+
+        # Adiciona nome do arquivo aos registros estruturados
+        for r in records:
+            r["nome_arquivo"] = filename
+
+        return records, categoria, tipo_tabela
+
+# Instância padrão mantendo compatibilidade
+extractor = DocumentExtractor()
+InvoiceExtractor = DocumentExtractor

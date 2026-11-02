@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: gold_notas_fiscais
+    description: "Tabela consolidada analítica de Notas Fiscais gerada pelo dbt a partir do Parquet em Gold"
+    columns:
+      - name: nome_arquivo
+        description: "Nome físico do arquivo original de origem"
+        tests:
+          - not_null
+      - name: numero_nota
+        description: "Número oficial da nota fiscal"
+        tests:
+          - not_null
+      - name: fornecedor
+        description: "Razão social ou nome fantasia do fornecedor/emitente"
+      - name: valor_total
+        description: "Valor monetário total apurado na nota fiscal"
+        tests:
+          - not_null
+
+  - name: catalogo_metadados
+    description: "Dicionário e catálogo de dados corporativo pronto para visualização no NocoDB"
+    columns:
+      - name: tabela
+        description: "Nome da tabela analítica"
+        tests:
+          - not_null
+      - name: campo
+        description: "Nome do atributo/coluna"
+        tests:
+          - not_null
+      - name: tipo_dado
+        description: "Tipo de dado físico do DuckDB"

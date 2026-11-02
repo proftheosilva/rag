@@ -1,205 +1,256 @@
-# RAG + Teophilo — Pipeline RAG Didático
+# RAG didático — Cucando TI
 
-Sistema educacional de **Retrieval-Augmented Generation (RAG)** focado em observabilidade, arquitetura limpa e rastreabilidade total do processo de IA generativa aplicada a documentos (Notas Fiscais em PDF).
+Aplicação educacional para acompanhar a ingestão de documentos estruturados e não-estruturados, tratamento em **Arquitetura Medalhão (Raw ➔ Silver ➔ Gold)** e consulta com **Retrieval-Augmented Generation (RAG)** integrado a um banco analítico e vetorial local com **DuckDB**. 
 
----
-
-## 🎯 Objetivos Educacionais
-
-Diferente de chatbots genéricos, esta aplicação foi desenhada para tornar visível cada engrenagem de um pipeline RAG:
-1. **Ingestão & OCR**: Leitura de PDFs e extração de dados tabulares estruturados.
-2. **Chunking**: Divisão em blocos semânticos com metadados detalhados de rastreabilidade.
-3. **Tokenização**: Contagem e decomposição didática de tokens com `tiktoken`.
-4. **Embeddings Locais**: Geração de vetores numéricos de 384 dimensões em ONNX Runtime local via **FastEmbed** (`BAAI/bge-small-en-v1.5`).
-5. **Banco Vetorial Supabase (PGVector)**: Persistência de vetores e busca vetorial por similaridade de cosseno com `top_k = 5`.
-6. **Prompt Aumentado**: Construção transparente unindo Pergunta + Contexto Recuperado + Instruções do Sistema.
-7. **LLM via OpenRouter**: Resposta fundamentada com o modelo `openrouter/auto`.
-8. **Regra Estrita Anti-Alucinação**: Caso a pergunta não possua dados suficientes no banco, o sistema retorna exatamente `"Sem dados disponiveis na base"`.
+A interface apresenta a extração polimórfica, a divisão em trechos, os embeddings, a busca vetorial por similaridade de cosseno, a inspeção analítica e o contexto enviado à LLM.
 
 ---
 
-## 🛠️ Stacks Utilizadas
+## Como funciona
 
-- **Backend**: Python 3.11+ / 3.13, FastAPI, Uvicorn, Pydantic, ReportLab, PDFPlumber, PyPDF, TikToken, FastEmbed.
-- **Banco de Dados**: Supabase (PostgreSQL 15+ com extensão `pgvector`).
-- **Embeddings**: FastEmbed ONNX (`BAAI/bge-small-en-v1.5`, 384 dimensões).
-- **LLM**: OpenRouter API (`openrouter/auto`).
-- **Frontend**: Next.js 16 (App Router, TypeScript, Vanilla CSS com Glassmorphism e tema tecnológico).
+### 1. Ingestão e Arquitetura Medalhão
 
----
-
-## 📋 Pré-requisitos
-
-- **Python** (versão 3.10 ou superior)
-- **Node.js** (versão 18 ou superior) e **npm**
-- Conta e projeto no **Supabase** (com `pgvector` habilitado)
-- Chave de API no **OpenRouter**
-
----
-
-## ⚙️ Procedimento de Configuração do Ambiente Python
-
-Siga os passos abaixo para configurar o ambiente virtual e instalar as dependências do backend:
-
-### 1. Clonar ou Acessar a Raiz do Repositório
-Abra o terminal na pasta raiz do projeto:
-```bash
-cd rag
-```
-
-### 2. Criar o Ambiente Virtual (`venv`)
-
-- **No Windows (PowerShell ou Prompt de Comando)**:
-  ```powershell
-  python -m venv venv
-  ```
-- **No Linux / macOS**:
-  ```bash
-  python3 -m venv venv
-  ```
-
-### 3. Ativar o Ambiente Virtual
-
-- **No Windows (PowerShell)**:
-  ```powershell
-  .\venv\Scripts\Activate.ps1
-  ```
-  *(Caso ocorra restrição de política de execução no PowerShell, execute primeiro `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`)*
-
-- **No Windows (CMD / Prompt de Comando)**:
-  ```cmd
-  venv\Scripts\activate.bat
-  ```
-
-- **No Linux / macOS**:
-  ```bash
-  source venv/bin/activate
-  ```
-
-### 4. Atualizar o `pip` e Instalar os Pacotes do `requirements.txt`
-
-Com o ambiente virtual ativado, execute:
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
----
-
-## 🔐 Configuração das Variáveis de Ambiente (`.env`)
-
-Crie um arquivo `.env` na raiz do projeto (ou copie a partir do [.env.example](file:///.env.example)):
-
-```ini
-# Supabase
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sua_publishable_key
-SUPABASE_SECRET_KEY=sua_secret_service_role_key
-
-# OpenRouter
-OPENROUTER_API_KEY=sk-or-v1-...
-```
-
-> **Atenção de Segurança**: O arquivo `.env` contém chaves confidenciais e **nunca** deve ser versionado no Git. Ele já está devidamente listado no [.gitignore](file:///.gitignore).
-
----
-
-## 📑 Gerar as Notas Fiscais Fictícias de Teste
-
-Para criar os 4 documentos PDF de notas fiscais de teste em `documentos/raw/`:
-
-```bash
-python backend/generate_sample_invoices.py
-```
-
-Os seguintes arquivos serão gerados:
-- `NF_1042_TechByte.pdf` (Informática e Eletrônicos)
-- `NF_2085_EscritorioReal.pdf` (Mobiliário e Papelaria)
-- `NF_3150_ConstrutoraHorizonte.pdf` (Materiais de Construção)
-- `NF_4899_AutoPecasCentral.pdf` (Autopeças e Lubrificantes)
-
----
-
-## 🚀 Como Executar o Projeto
-
-Abra dois terminais na raiz do projeto. Ative o ambiente virtual Python no terminal do backend.
-
-### Terminal 1 — Iniciar o Backend (FastAPI)
-Com o `venv` ativado:
-```bash
-uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
-```
-A API estará disponível em:
-- **API Base**: `http://127.0.0.1:8000`
-- **Documentação Swagger**: `http://127.0.0.1:8000/docs`
-
-### Terminal 2 — Iniciar o Frontend (Next.js)
-Navegue até a pasta `frontend` e instale as dependências (se for a primeira vez):
-```bash
-cd frontend && npm run dev
-```
-
-Se esta for a primeira execução do frontend, instale antes suas dependências, dentro de `frontend`, com `npm install`. Depois que os dois terminais estiverem rodando, acesse **[http://localhost:3000](http://localhost:3000)**.
-
----
-
-## 🧪 Como Testar a Aplicação
-
-1. **Aba 📥 Pipeline de Ingestão**:
-   - Clique em **"⚡ Ingerir Todos os 4 PDFs"**.
-   - Observe a animação e o progresso em 5 fases: `Ingestão/OCR ➔ Chunking ➔ Tokenização ➔ Embedding ➔ Índice Vetorial`.
-   - Veja a tabela com o percentual de campos válidos, amostra de tokens e previews vetoriais de cada chunk.
-
-2. **Aba 💬 Consulta RAG**:
-   - Faça perguntas de exemplo:
-     - *"Quais modelos de notebook foram comprados e qual foi o total da nota?"*
-     - *"Quanto custou a tinta acrílica e o cimento na reforma?"*
-     - *"Quais pneus foram adquiridos para a frota?"*
-   - Teste a regra de **Ausência de Dados**:
-     - *"Qual a receita de bolo de chocolate?"*
-     - Resultado esperado: `"Sem dados disponiveis na base"`.
-   - Clique em **"▼ Inspecionar Pipeline RAG (Passo a Passo)"** no balão da resposta para visualizar a tokenização da sua pergunta, vetor gerado, Top 5 candidatos no PGVector com scores de similaridade, prompt aumentado construído e métricas de tempo em milissegundos.
-
----
-
-## 📂 Estrutura de Diretórios
+O pipeline segue o padrão Medalhão com persistência em arquivos colunares Parquet e banco analítico/vetorial DuckDB:
 
 ```text
-rag/
-├── .env                       # Variáveis de ambiente locais (ignorado no Git)
-├── .env.example               # Exemplo de configuração do .env
-├── .gitignore                 # Filtro de arquivos e diretórios desnecessários
-├── requirements.txt           # Dependências Python do backend
-├── README.md                  # Documentação completa do projeto
-├── prompt                     # Especificação mestre de requisitos
-├── rag.txt                    # Definições de ambiente e arquitetura
-├── documentos/
-│   ├── raw/                   # PDFs aguardando ingestão
-│   └── gold/                  # PDFs cuja ingestão foi concluída no Supabase
-├── backend/                   # Código-fonte da API Python (FastAPI)
-│   ├── config.py              # Leitura de variáveis com python-dotenv
-│   ├── database.py            # Integração Supabase e chamadas PGVector
-│   ├── extractor.py           # Extração OCR e estruturação tabular
-│   ├── chunker.py             # Divisão em chunks e metadados
-│   ├── tokenizer.py           # Tokenização explícita via TikToken
-│   ├── embedder.py            # FastEmbed BAAI/bge-small-en-v1.5 (384d)
-│   ├── rag_service.py         # Pipeline completo de RAG e regras de negócio
-│   ├── main.py                # Rotas da API FastAPI
-│   └── generate_sample_invoices.py  # Gerador dos PDFs fictícios
-└── frontend/                  # Aplicação web moderna em Next.js
-    ├── app/
-    │   ├── globals.css        # Design system e Glassmorphism
-    │   ├── layout.tsx         # Layout base e metadados
-    │   └── page.tsx           # Interface com Chat, Ingestão e PGVector
-    ├── package.json
-    └── next.config.ts         # Configuração de rewrites para a API
+Entrada (RAW / Subpastas ou Webhook)
+       │
+       ▼
+Identificação de Tipo & Extração Polimórfica
+ (Estruturado: CSV/JSON/SQL  │  Não Estruturado: PDF)
+       │
+       ▼
+Camada SILVER
+ - Limpeza e higienização
+ - Descarte de registros inconsistentes e nulos críticos
+ - Concatenação incremental em Parquet por categoria (ex: notas_fiscais.parquet)
+       │
+       ▼
+Camada GOLD
+ - Parquet consolidado promovido e pronto para Lakehouse / Data Warehouse
+       │
+       ▼
+Banco Analítico & Vetorial DUCKDB (dados/documentos/database/analytics.duckdb)
+ ├── Tabelas Analíticas: sincronizadas diretamente do Parquet (ex: CREATE TABLE notas_fiscais AS SELECT * FROM read_parquet(...))
+ ├── Tabela Relacional: 'documentos' (metadados, status e observabilidade de extração)
+ └── Tabela Vetorial: 'documento_chunks' (chunks de texto + vetor FLOAT[384] gerado pelo FastEmbed)
 ```
 
+1. **Recepção / Varredura RAW:**
+   - Documentos organizados por seções/divisões empresariais dentro de `dados/documentos/raw` (exemplo didático: subpasta `dados/documentos/raw/FINANCEIRO/`).
+   - Também suporta recebimento direto via **Webhook** (upload binário multipart, base64 ou URL remota em `/api/webhook` e `/api/ingest`).
+2. **Extração Polimórfica:**
+   - **Estruturados e Semiestruturados (`.csv`, `.json`, `.sql`):** extração e tabulação automática de registros via Pandas.
+   - **Não-estruturados (`.pdf`, texto):** extração de texto integral via `pdfplumber`/`pypdf` e extração de campos semânticos por expressões regulares.
+3. **Tratamento na Camada Silver:**
+   - Mapeamento e tipagem dos campos.
+   - Higienização e remoção de registros com nulos críticos para consistência.
+   - Adição incremental ao arquivo Parquet por categoria (ex: `silver/notas_fiscais.parquet`), unindo novos registros sem criar arquivos avulsos fragmentados.
+4. **Consolidação na Camada Gold:**
+   - O Parquet final e higienizado é promovido para a pasta `gold/`.
+5. **Persistência Analítica e Vetorial no DuckDB:**
+   - O arquivo `dados/documentos/database/analytics.duckdb` mantém:
+     - As tabelas analíticas tabulares geradas dos Parquets (ex: tabela `notas_fiscais`).
+     - A tabela relacional `documentos` (histórico, total de campos, preenchidos, nulos, percentual de sucesso e status).
+     - A tabela vetorial `documento_chunks` (armazenando o texto do chunk, metadados em JSON e vetor numérico `FLOAT[]` de 384 dimensões).
 
-## Frontend restaurado
+---
 
-Na pasta `frontend`, execute `npm install` e `npm run dev`. Acesse http://127.0.0.1:3000. O Next.js encaminha `/api/*` ao backend em http://127.0.0.1:8000. Para outro endereço, configure `BACKEND_URL` no ambiente do processo Next.js. Nenhuma chave Supabase ou OpenRouter é enviada ao navegador.
+### 2. Consulta RAG com DuckDB Vetorial
 
-O chat consulta `POST /api/query` com `pergunta`, `top_k` e `min_threshold`. Cada consulta é independente: o histórico visual não é memória conversacional. A inspeção mostra trechos recuperados, IDs, metadados, scores, prompt aumentado e tempos medidos pelo backend após a conclusão. A tokenização tiktoken é didática e independente da tokenização interna do FastEmbed e do modelo de geração. Os tokens de entrada, saída e total são retornados pelo OpenRouter; campos ausentes aparecem como não informados. A API também retorna o modelo efetivamente utilizado.
+```text
+Pergunta do Usuário ──► Tokenização (tiktoken) ──► FastEmbed (Vetor 384d)
+                                                           │
+                                                           ▼
+                                         Busca Vetorial Nativa no DuckDB
+                                         list_cosine_similarity(vetor, query)
+                                                           │
+                                                           ▼
+                                          Trechos Relevantes Recuperados
+                                                           │
+                                                           ▼
+Prompt Aumentado (Instruções + Contexto Top-K + Pergunta) ──► OpenRouter (LLM) ──► Resposta Final
+```
 
-A ingestão usa `POST /api/ingest` e lê os PDFs de `documentos/raw/`. Após salvar os metadados em `documentos` e todos os chunks vetorizados em `documento_chunks`, o PDF é movido para `documentos/gold/`. Se já existir um arquivo com o mesmo nome em `gold`, o arquivo recém-processado recebe um sufixo único para evitar sobrescrever o anterior. A tela exibe todos os PDFs que ainda estão em `raw`; após a ingestão bem-sucedida, a atualização da lista remove o arquivo porque ele foi movido para `gold`. A resposta da API e a interface confirmam a conclusão no Supabase e mostram os nomes dos arquivos inseridos com sucesso; falhas parciais são indicadas separadamente. Se um PDF já indexado ainda estiver em `raw` (por exemplo, após uma falha na movimentação), a ingestão o move para `gold` sem criar chunks duplicados. A tela também informa o total de documentos e chunks vetorizados no Supabase. A identificação usa o nome do arquivo: substituir o conteúdo mantendo o mesmo nome não dispara nova ingestão automaticamente. O extrator atual lê texto de PDFs, sem OCR de páginas escaneadas. O projeto deve permanecer local para esta prática; suas rotas de ingestão e exclusão não possuem autenticação.
+1. **Tokenização:** A pergunta é inspecionada didaticamente com `tiktoken` (`cl100k_base`).
+2. **Embedding:** Geração do vetor denso de 384 dimensões com o modelo local `BAAI/bge-small-en-v1.5` via FastEmbed.
+3. **Retrieval Vetorial no DuckDB:**
+   - Substituição do Supabase/pgvector pela função de similaridade nativa do DuckDB:
+     ```sql
+     SELECT id, documento_id, texto, metadados,
+            list_cosine_similarity(vetor, ?::FLOAT[]) AS similarity
+     FROM documento_chunks
+     WHERE list_cosine_similarity(vetor, ?::FLOAT[]) >= ?
+     ORDER BY similarity DESC
+     LIMIT ?;
+     ```
+4. **Regra Estrita de Ausência de Dados:**
+   - Se nenhum trecho atingir o limiar mínimo de relevância (`min_threshold`), o sistema retorna imediatamente `Sem dados disponiveis na base` sem gastar tokens nem acionar a LLM.
+5. **Geração Contextualizada:**
+   - Havendo evidências relevantes, o prompt aumentado é montado e submetido à LLM via OpenRouter (`openrouter/auto`), instruindo o modelo a responder estritamente com base nos documentos citados.
+
+---
+
+## Tecnologias
+
+- **Frontend:** Next.js 16, React 19, JavaScript e CSS Vanilla; encaminha chamadas `/api/*` ao backend e exibe o status de DuckDB, OpenRouter e pipeline medalhão.
+- **Backend:** Python, FastAPI, Uvicorn, Pydantic e HTTPX.
+- **Banco Analítico e Vetorial:** **DuckDB** (substituindo Supabase PGVector para metadados relacionais, tabelas analíticas e busca vetorial por similaridade de cosseno embutida).
+- **Formatos de Dados & Lakehouse:** **Apache Parquet** (`pyarrow` e `pandas`) particionado por tipo nas camadas `silver/` e `gold/`.
+- **Extração de Documentos:** `pdfplumber`, `pypdf`, `pandas` (CSV/JSON/SQL) e regex customizado.
+- **Embeddings:** FastEmbed local (ONNX Runtime), modelo `BAAI/bge-small-en-v1.5` (384 dimensões).
+- **Tokenização Didática:** `tiktoken`.
+- **Geração (LLM):** API OpenRouter (`openrouter/auto`).
+- **Ambiente:** Execução local ou via Docker Desktop / Docker Compose.
+
+---
+
+## Estrutura de Diretórios
+
+O projeto segue a padronização centralizada na pasta `dados/documentos` na raiz do laboratório:
+
+```text
+laboratorio-ia-docker/
+├── compose.yaml
+├── apps/
+│   └── rag/                              # Aplicação RAG
+│       ├── .env                          # Variáveis de ambiente
+│       ├── Dockerfile                    # Container Python do backend
+│       ├── backend/
+│       │   ├── config.py                 # Mapeamento das camadas e caminhos
+│       │   ├── database.py               # DuckDBManager (relacional, vetorial e analítico)
+│       │   ├── extractor.py              # Extrator polimórfico (PDF, CSV, JSON, SQL)
+│       │   ├── medallion_service.py      # Gestor das camadas Raw, Silver e Gold (Parquet)
+│       │   ├── rag_service.py            # Orquestrador do pipeline RAG e varredura
+│       │   ├── chunker.py                # Divisão semântica por blocos
+│       │   ├── embedder.py               # Geração local de embeddings (FastEmbed)
+│       │   ├── tokenizer.py              # Tokenizador didático (tiktoken)
+│       │   ├── test_pipeline.py          # Script de testes automatizados ponta a ponta
+│       │   └── main.py                   # API FastAPI e rotas de webhook/ingestão/consulta
+│       ├── frontend/
+│       └── requirements.txt
+└── dados/
+    └── documentos/                       # Pasta compartilhada do Lakehouse / Documentos
+        ├── raw/                          # Camada RAW dividida por divisões da empresa
+        │   ├── FINANCEIRO/               # Exemplo didático: subpasta do setor financeiro
+        │   ├── RH/
+        │   ├── PAGAMENTO/
+        │   └── ALMOXARIFADO/
+        ├── silver/                       # Camada SILVER: dados tratados em .parquet por tipo
+        │   └── notas_fiscais.parquet
+        ├── gold/                         # Camada GOLD: parquets consolidados prontos para analytics
+        │   └── notas_fiscais.parquet
+        └── database/                     # Banco Analítico e Vetorial Local
+            └── analytics.duckdb          # Arquivo do banco DuckDB
+```
+
+---
+
+## Configuração das Variáveis de Ambiente (`.env`)
+
+Crie o arquivo `apps/rag/.env`:
+
+```dotenv
+# Provedor LLM
+OPENROUTER_API_KEY=sua_chave_aqui
+OPENROUTER_MODEL=openrouter/auto
+
+# Configurações do RAG e Embeddings
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+EMBEDDING_DIMENSION=384
+
+# Origem de Ingestão Padrão ('raw' ou 'webhook')
+DOCUMENT_SOURCE=raw
+
+# Opcional: Caminhos personalizados (caso deseje sobrescrever o padrão)
+# BASE_DOCS_DIR=/caminho/para/dados/documentos
+# DUCKDB_PATH=/caminho/para/dados/documentos/database/analytics.duckdb
+```
+
+> **Nota sobre o Supabase:** O Supabase foi substituído pelo **DuckDB** para persistência e busca vetorial local de alta velocidade. As chaves do Supabase não são mais obrigatórias para a execução do pipeline.
+
+---
+
+## Execução Local e Docker
+
+### Opção A: Execução via Docker Compose (Recomendado no Laboratório)
+
+Na raiz do laboratório:
+
+```powershell
+docker compose up -d --build rag rag-frontend
+```
+
+Acompanhar logs:
+```powershell
+docker compose logs -f rag rag-frontend
+```
+
+Acessos:
+- **Aplicação Web:** http://localhost:3000
+- **Documentação Swagger (FastAPI):** http://localhost:8000/docs
+- **Status do Sistema:** http://localhost:8000/api/status
+
+---
+
+### Opção B: Execução Local no Terminal
+
+1. Instalar dependências:
+   ```powershell
+   cd apps/rag
+   pip install -r requirements.txt
+   ```
+
+2. Executar testes automatizados do pipeline:
+   ```powershell
+   python -m backend.test_pipeline
+   ```
+
+3. Iniciar o servidor backend:
+   ```powershell
+   python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+---
+
+| Método e Rota | Finalidade |
+| --- | --- |
+| `GET /api/status` | Exibe estado do DuckDB, OpenRouter, dimensões do FastEmbed e arquitetura. |
+| `GET /api/available-files?secao=FINANCEIRO` | Varre a subpasta correspondente em `raw` e compara com os arquivos indexados no DuckDB. |
+| `GET /api/documents` | Lista os documentos cadastrados na tabela relacional `documentos` do DuckDB. |
+| `GET /api/duckdb-tables` | Lista todas as tabelas analíticas e vetoriais existentes no `analytics.duckdb`. |
+| `GET /api/catalogo` | Retorna o dicionário de dados corporativo extraído pelo dbt/DuckDB das tabelas em Gold. |
+| `POST /api/ingest` | Processa arquivos da subpasta informada (ex: `FINANCEIRO`) sob a arquitetura Medalhão (Silver ➔ Gold ➔ DuckDB). |
+| `POST /api/webhook` | Endpoint dedicado para recebimento externo (n8n, ERP, etc.) via multipart, JSON base64 ou binário puro. |
+| `POST /api/query` | Executa a busca vetorial por similaridade de cosseno no DuckDB e responde via LLM. |
+| `DELETE /api/documents` | Limpa as tabelas de chunks e documentos no DuckDB para reinício de testes. |
+
+---
+
+## Catálogo de Dados Corporativo (NocoDB) e dbt-duckdb
+
+O pipeline conta com **dbt-duckdb** e **NocoDB** para transformar e catalogar os dados:
+- **dbt-duckdb (`apps/rag/dbt_project`):** 
+  - Lê diretamente os arquivos `.parquet` em `gold/` via motor colunar do DuckDB.
+  - Executa modelos declarativos em SQL com testes de qualidade (`not_null`, `unique`).
+  - Extrai o esquema e tipos de dados do `information_schema.columns` gerando a tabela `catalogo_metadados`.
+- **NocoDB (`laboratorio-nocodb` na porta 8085):**
+  - Fornece aos alunos e equipes corporativas uma interface visual em tempo real (como Airtable/Smart Spreadsheet) para navegar pelas tabelas analíticas e consultar o Dicionário de Dados.
+  - Acessível em: **`http://localhost:8085`**
+
+
+---
+
+## Integração com n8n e Webhooks
+
+Para disparar a ingestão via n8n:
+- **Via nome de arquivo em subpasta:**
+  ```json
+  POST http://rag:8000/api/ingest
+  {
+    "filename": "NF_8010_AuditContabil.pdf",
+    "secao": "FINANCEIRO"
+  }
+  ```
+- **Via envio direto de arquivo (sem depender da pasta física):**
+  - Enviar requisição para `http://rag:8000/api/webhook` usando `multipart/form-data` com o campo `file` contendo o arquivo binário ou enviando JSON com `file_base64`.

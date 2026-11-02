@@ -315,9 +315,10 @@ export default function Page() {
           </label>
         </div>
         <div className="service">
-          <strong>Conexões</strong>
+          <strong>Conexões & Catálogo</strong>
           <p>Backend · {status?.status || "Verificando…"}</p>
-          <p>Supabase · {status?.services?.supabase || "Não verificado"}</p>
+          <p>DuckDB · {status?.services?.duckdb || "Não verificado"}</p>
+          <p>Catálogo NocoDB · <a href="http://localhost:8085" target="_blank" rel="noreferrer" style={{color: "inherit", textDecoration: "underline"}}>porta 8085 ↗</a></p>
           <p>OpenRouter · {status?.services?.openrouter || "Não verificado"}</p>
         </div>
         <p className="notice">
