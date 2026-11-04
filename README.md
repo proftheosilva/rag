@@ -216,11 +216,16 @@ Acessos:
 | Método e Rota | Finalidade |
 | --- | --- |
 | `GET /api/status` | Exibe estado do DuckDB, OpenRouter, dimensões do FastEmbed e arquitetura. |
-| `GET /api/available-files?secao=FINANCEIRO` | Varre a subpasta correspondente em `raw` e compara com os arquivos indexados no DuckDB. |
+| `GET /api/available-files?secao=FINANCEIRO` | Varre a subpasta correspondente em `raw` listando estritamente os arquivos físicos disponíveis. |
+| `GET /api/documents/summary` | Endpoint dedicado de governança: exibe o total consolidado de documentos e chunks no DuckDB. |
 | `GET /api/documents` | Lista os documentos cadastrados na tabela relacional `documentos` do DuckDB. |
 | `GET /api/duckdb-tables` | Lista todas as tabelas analíticas e vetoriais existentes no `analytics.duckdb`. |
 | `GET /api/catalogo` | Retorna o dicionário de dados corporativo extraído pelo dbt/DuckDB das tabelas em Gold. |
-| `POST /api/ingest` | Processa arquivos da subpasta informada (ex: `FINANCEIRO`) sob a arquitetura Medalhão (Silver ➔ Gold ➔ DuckDB). |
+| `POST /api/pipeline/extract` | **Passo 1 Modular:** Extração e identificação de categoria do documento. |
+| `POST /api/pipeline/silver` | **Passo 2 Modular:** Higienização e gravação incremental em Parquet na camada Silver. |
+| `POST /api/pipeline/gold` | **Passo 3 Modular:** Promoção do Parquet para Gold, DuckDB analítico e atualização do dbt. |
+| `POST /api/pipeline/vectorize` | **Passo 4 Modular:** Chunking, tokenização, embeddings FastEmbed e persistência vetorial no DuckDB. |
+| `POST /api/ingest` | Pipeline completo de ponta a ponta para a subpasta informada (Silver ➔ Gold ➔ DuckDB). |
 | `POST /api/webhook` | Endpoint dedicado para recebimento externo (n8n, ERP, etc.) via multipart, JSON base64 ou binário puro. |
 | `POST /api/query` | Executa a busca vetorial por similaridade de cosseno no DuckDB e responde via LLM. |
 | `DELETE /api/documents` | Limpa as tabelas de chunks e documentos no DuckDB para reinício de testes. |
@@ -254,3 +259,27 @@ Para disparar a ingestão via n8n:
   ```
 - **Via envio direto de arquivo (sem depender da pasta física):**
   - Enviar requisição para `http://rag:8000/api/webhook` usando `multipart/form-data` com o campo `file` contendo o arquivo binário ou enviando JSON com `file_base64`.
+
+---
+
+## Dúvidas Frequentes & Detalhes de Arquitetura
+
+### 1. Como o algoritmo interpreta a categoria de cada documento?
+O algoritmo polimórfico (`DocumentExtractor`) realiza a classificação com base em duas camadas:
+- **Padrão de Conteúdo e Nomenclatura:** Analisa palavras-chave estruturantes no texto. Para Notas Fiscais, busca expressões como `DANFE`, `NATUREZA DA OPERAÇÃO`, `EMITENTE / FORNECEDOR` ou prefixos no nome do arquivo (`NF_`). Ao identificar o padrão, define a categoria como `"Notas Fiscais"` e a tabela de destino como `"notas_fiscais"`.
+- **Tipo de Arquivo:** Arquivos estruturados (`.csv`, `.json`, `.sql`) contendo contratos ou transações financeiras são automaticamente mapeados para suas respectivas categorias (`"Contratos"` ➔ tabela `contratos`, `"Dados Financeiros"` ➔ tabela `financeiro_estruturado`).
+
+### 2. E se vier um campo novo em uma categoria já existente? O que acontece com os registros anteriores?
+Este projeto implementa o conceito de **Schema Evolution (Evolução de Esquema)** nativo:
+- **Na Camada Silver (Pandas + Parquet):** Ao ler o Parquet existente e concatenar com o novo registro via `pd.concat([df_existing, df_new], ignore_index=True)`, o Pandas faz um **Outer Join** automático das colunas.
+- **Preenchimento Automático:** A nova coluna é adicionada ao arquivo `.parquet`. Para todos os registros anteriores que não possuíam esse campo, o valor é automaticamente gravado como **`NULL / ausente`**, sem perda de dados ou quebra de retrocompatibilidade.
+- **No DuckDB & dbt:** Quando a camada Gold é atualizada, o DuckDB recria a tabela lendo o novo Parquet (`CREATE OR REPLACE TABLE ... AS SELECT * FROM read_parquet(...)`). O motor infere a nova coluna instantaneamente e o `dbt-duckdb` insere a nova linha no `catalogo_metadados`, ficando imediatamente pronta para governança no NocoDB.
+
+### 3. Por que o nó `/api/available-files` não lista mais dados analíticos do DuckDB?
+Para respeitar o **Princípio de Responsabilidade Única (Single Responsibility Principle)** e garantir alta resiliência:
+- A responsabilidade de `/api/available-files` é estritamente **varrer o disco físico** na camada RAW e devolver o inventário de arquivos prontos para ingestão.
+- Misturar consultas analíticas pesadas no início da esteira gerava acoplamento indesejado e risco de lock de arquivos. Para auditoria e observabilidade do banco, utiliza-se o endpoint dedicado: `GET /api/documents/summary`.
+
+### 4. Por que usar o nó `Schedule Trigger` no n8n em vez de `Local File Trigger` no ambiente Docker?
+Em ambientes de laboratório no Windows com Docker Desktop (WSL2), eventos do kernel do Linux (`inotify`) disparados pela criação de arquivos no Windows Explorer nem sempre propagam em tempo real para os volumes compartilhados do container. A abordagem com `Schedule Trigger` (ou manual) chamando `GET /api/available-files` garante execução determinística, confiável e profissional em qualquer sistema operacional.
+
